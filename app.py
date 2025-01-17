@@ -1,19 +1,98 @@
 import logging
-
-from flask import Flask, render_template, Response, jsonify, request
+from flask import flash
+import json
+import time
+from flask import Flask, render_template, Response, jsonify, request,redirect, url_for, session
 import cv2
 import face_recognition
 import numpy as np
 import psycopg2
 from datetime import datetime, timedelta
+camera_paused = False
+
+import os
+import sys
+
+
+def resource_path(relative_path):
+    """Get the absolute path to a resource, works for dev and PyInstaller."""
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstaller stores files in a temporary folder during runtime
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
+# List of all the .dat files you need to access
+dat_files = [
+    "face_recognition_models/models/shape_predictor_68_face_landmarks.dat",
+    "face_recognition_models/models/shape_predictor_5_face_landmarks.dat",
+    "face_recognition_models/models/dlib_face_recognition_resnet_model_v1.dat",
+    "face_recognition_models/models/mmod_human_face_detector.dat"
+]
+
+
+# Iterate over the list of files and get their paths
+dat_file_paths = [resource_path(file) for file in dat_files]
+
+# Print paths to check if they're correct
+for path in dat_file_paths:
+    print(path)
+
+# Example usage: Load a specific file (you can choose based on your logic)
+file_to_use = dat_file_paths[0]  # Use the first file as an example
+print(f"Using file: {file_to_use}")
+
 
 from flask_socketio import SocketIO
 app = Flask(__name__)
-socketio = SocketIO(app)
-
+socketio = SocketIO(app , async_mode='threading') 
+app.secret_key = os.urandom(24)  # Generates a 24-byte random secret key
+users = {
+    "admin": "password123"
+}
 # Database connection function
+# def get_db_connection():
+#     return psycopg2.connect(database="AiSystemDB", user="postgres", password="qwerty123", host="localhost", port="5432")
+
 def get_db_connection():
-    return psycopg2.connect(database="AiSystemDB", user="postgres", password="qwerty123", host="localhost", port="5432")
+    config_file = "dbconnectinfo"
+    
+    # Check if the config file exists
+    if not os.path.exists(config_file):
+        print("Database connection file not found.")
+        # Prompt user for database details
+        db_details = {
+            "database": input("Enter database name: "),
+            "user": input("Enter database user: "),
+            "password": input("Enter database password: "),
+            "host": input("Enter database host: "),
+            "port": input("Enter database port: "),
+        }
+        
+        # Save the details to the config file
+        with open(config_file, "w") as f:
+            json.dump(db_details, f)
+        
+        print(f"Database connection details saved to {config_file}.")
+    else:
+        # Load database details from the file
+        with open(config_file, "r") as f:
+            db_details = json.load(f)
+    
+    # Connect to the database using the details
+    try:
+        connection = psycopg2.connect(
+            database=db_details["database"],
+            user=db_details["user"],
+            password=db_details["password"],
+            host=db_details["host"],
+            port=db_details["port"]
+        )
+        # print("Database connection established successfully.")
+        return connection
+    except Exception as e:
+        print(f"Error connecting to the database: {e}")
+        exit(1)
+        
 def initialize_database():
     try:
         # Use the existing get_db_connection function to connect to the database
