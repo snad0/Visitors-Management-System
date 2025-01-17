@@ -147,6 +147,30 @@ def initialize_database():
 
     except Exception as e:
         print(f"Error initializing database tables: {e}")
+def convert_to_binary_data(filename):
+    with open(filename, 'rb') as file:
+        binary_data = file.read()
+    return binary_data
+
+def insert_resident(name, address, block_no, resident_type, image_path):
+    image_data = convert_to_binary_data(image_path)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO residents_detail (resident_id,name, address, block_no, resident_type, image)
+        VALUES (%s,%s, %s, %s, %s, %s)
+    """, ('R1',name, address, block_no, resident_type, image_data))
+    conn.commit()
+    print(f"Inserted resident {name}.")
+path = "data"
+for filename in os.listdir(path):
+    try:
+        name = os.path.splitext(filename)[0]  # Use filename as resident name for demonstration
+        file_path = os.path.join(path, filename)
+        insert_resident(name=name, address="Sample Address", block_no="A1", resident_type="owned", image_path=file_path)
+    except:
+        print("R1 Already exist")
 
 # Configure logging to write to a file
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(message)s')
